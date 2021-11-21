@@ -17,6 +17,7 @@ import java.util.Arrays;
 @Component // 빈으로 등록
 @Aspect // 흩어진 기능을 뭉쳐서 쓴다. AOP로 동작
 public class ExecuteLogAspect {
+    @SuppressWarnings("unchecked")
     @Around(value = "@annotation(ExecuteLog)") // 언제 실행되는지(위빙되는 시점) @annotation(ExecuteLog)가 선언된 함수에서만 위빙이 일어난다.
     public <T> Object log(ProceedingJoinPoint joinPoint) throws Throwable {
         // jointpoint는 위빙된 위치에 대한 정보를 갖고 있다.
@@ -24,31 +25,37 @@ public class ExecuteLogAspect {
         // 작업 시작 시간을 구합니다.
         long start = System.currentTimeMillis();
 
-        // 위빙된 객체의 작업을 진행합니다.
-        final T result = (T) joinPoint.proceed(); // joinPoint.proceed()는 원본 객체를 실행하라는 의미
-
         MethodSignature signature = (MethodSignature) joinPoint.getSignature(); // 원본함수의 시그니처를 joinpoint를 통해 가지고 온다.
 
         // ExecuteLog 어노테이션에 type 값에 들어간 타입을 추론합니다.
         Class<T> clazzType = this.classType(signature.getMethod().getAnnotations());
 
+        // 위빙된 객체의 작업을 진행합니다.
+        final T result = (T) joinPoint.proceed(); // joinPoint.proceed()는 원본 객체를 실행하라는 의미
+        // 어떤 타입인지 알아냈기 때문에 원하는 타입으로 받아낼 수 있다.
+        // 받아냈기 때문에 타입이 가지고 있는 필드랑 메소드에 접근이 가능하다.
+
         String methodName = signature.getName(); // 어떤 함수가 실행된지 모르기 때문에 이름을 가져온다.
         String input = Arrays.toString(signature.getParameterNames()) + Arrays.toString(joinPoint.getArgs()); // 입력에 해당하는 값
 
-        String output = result.toString();
+        String output = this.toString(result);
 
         log.info("Method Name : {}, Input : {}, Output : {}, Execute Time : {}", methodName, input, output, (System.currentTimeMillis() - start) + " ms");
 
         return result;
     }
+
+    // final T result = (T) joinPoint.proceed();을 리스트업 하는 함수
+    // toString에 해당하는 함수를 직접 구현.
     private <T> String toString(T result) throws Throwable {
         StringBuilder sb = new StringBuilder();
         sb.append("[");
-        for(Field field : result.getClass().getDeclaredFields()) {
-            if(Strings.isBlank(field.getName())) {
+        for(Field field : result.getClass().getDeclaredFields()) { /* 타입의 field를 받아서 모두 보여주는 함수
+                                                        (여기서는 Article의 Long id, String title, String content) */
+            if(Strings.isBlank(field.getName())) { // field 네임이 없으면 기록하지 않는다.
                 continue;
             }
-            field.setAccessible(true);
+            field.setAccessible(true); // field는 보통 정보은닉(private)을 해놓지만(여기선 하지 않았음) public으로 바꿔즌다
             sb.append(field.getName()).append("=").append(field.get(result)).append(", ");
         }
         sb.append("]");
